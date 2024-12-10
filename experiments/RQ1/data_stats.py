@@ -9,7 +9,5 @@ df.columns
 # %%
 df["dataset"].value_counts()
 # %%
-print(
-pd.crosstab(df["dataset"], df["implicitness"]).to_latex()
-)
+print(pd.crosstab(df["dataset"], df["implicitness"]).to_latex())
 # %%
