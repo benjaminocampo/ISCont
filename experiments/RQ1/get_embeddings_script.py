@@ -5,6 +5,9 @@ import pandas as pd
 from sklearn.metrics.pairwise import euclidean_distances
 from mistralai import Mistral
 from tqdm import tqdm
+from dotenv import load_dotenv
+
+load_dotenv()
 
 api_key = os.environ["MISTRAL_API_KEY"]
 model = "mistral-embed"
@@ -20,5 +23,21 @@ def get_text_embedding(inputs):
     return embeddings_batch_response.data[0].embedding
 
 all_data = pd.read_parquet("../../data/data_IS_prep.parquet.gzip")
-all_data["imp_IS_emb"] = all_data["IS_prep"].apply(lambda t: get_text_embedding(t) if t is not None else t)
-all_data["text_emb"] = all_data["text"].apply(lambda t: get_text_embedding(t))
+
+
+IS_embs = []
+text_embs = []
+for _, row in tqdm(all_data.iterrows(), total=len(all_data)):    
+    if row["IS_prep"] is not None:
+        IS_emb = get_text_embedding(row["IS_prep"])
+        IS_embs.append(IS_emb)
+    else:
+        IS_embs.append(None)
+    
+    text_emb = get_text_embedding(row["text"])
+    text_embs.append(text_emb)
+
+all_data["IS_emb"] = IS_embs
+all_data["text_emb"] = text_embs
+
+all_data.to_parquet("../../data/data_IS_embs.parquet.gzip", index=False)
