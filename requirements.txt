@@ -4,4 +4,7 @@ pyarrow
 torch
 scikit-learn
 mistralai
-dotenv
+python-dotenv
+sentence-transformers
+mlflow
+hydra-core
