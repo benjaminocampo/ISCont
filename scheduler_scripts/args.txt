@@ -1,0 +1,10 @@
+train/model=bert input.run_name=bert-baseline-seed-42 model.params.seed=42
+train/model=bert input.run_name=bert-baseline-seed-43 model.params.seed=43
+train/model=bert input.run_name=bert-baseline-seed-44 model.params.seed=44
+train/model=bert input.run_name=bert-baseline-seed-45 model.params.seed=45
+train/model=bert input.run_name=bert-baseline-seed-46 model.params.seed=46
+train/model=hatebert input.run_name=hatebert-baseline-seed-42 model.params.seed=42
+train/model=hatebert input.run_name=hatebert-baseline-seed-43 model.params.seed=43
+train/model=hatebert input.run_name=hatebert-baseline-seed-44 model.params.seed=44
+train/model=hatebert input.run_name=hatebert-baseline-seed-45 model.params.seed=45
+train/model=hatebert input.run_name=hatebert-baseline-seed-46 model.params.seed=46
