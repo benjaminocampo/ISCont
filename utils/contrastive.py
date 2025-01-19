@@ -7,9 +7,46 @@ from torch.utils.data import Dataset
 from huggingface_hub import HfApi, HfFolder
 
 
-class CustomDataset(Dataset):
+class ContrastiveModel(nn.Module):
+    def __init__(self, model, num_labels):
+        super(ContrastiveModel, self).__init__()
+        self.model = model
+        self.num_labels = num_labels
+        self.embedding_dim = model.config.hidden_size
+        self.fc = nn.Linear(self.embedding_dim, self.embedding_dim)
+        self.classifier = nn.Linear(
+            self.embedding_dim, self.num_labels
+        )  # Classification layer
+
+    def forward(self, input_ids, attention_mask):
+        outputs = self.model(input_ids, attention_mask)
+        embeddings = outputs.last_hidden_state[
+            :, 0
+        ]  # Use the CLS token embedding as the representation
+        embeddings = self.fc(embeddings)
+        logits = self.classifier(embeddings)  # Apply classification layer
+
+        return embeddings, logits
+
+
+class ContrastiveLoss(nn.Module):
+    def __init__(self, margin):
+        super(ContrastiveLoss, self).__init__()
+        self.margin = margin
+        self.cosine_similarity = nn.CosineSimilarity(dim=1)
+
+    def forward(self, embeddings1, embeddings2, target):
+        similarity = self.cosine_similarity(embeddings1, embeddings2)
+        loss = torch.mean(
+            (1 - target) * torch.pow(similarity, 2)
+            + target * torch.pow(torch.clamp(self.margin - similarity, min=0.0), 2)
+        )
+        return loss
+
+
+class ContrastiveDataset(Dataset):
     def __init__(
-        self, texts1, texts2, labels, features, tokenizer, max_length1, max_length2
+        self, texts1, texts2, labels, features, tokenizer, max_length1=512, max_length2=512
     ):
         self.texts1 = texts1
         self.texts2 = texts2
