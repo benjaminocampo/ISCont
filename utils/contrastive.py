@@ -1,18 +1,22 @@
 import torch
 import numpy as np
 import json
+from sklearn.metrics.pairwise import euclidean_distances
 from torch import nn
 from tqdm import tqdm
 from torch.utils.data import Dataset
-from huggingface_hub import HfApi, HfFolder
+from huggingface_hub import HfApi, HfFolder, PyTorchModelHubMixin
 
 
-class ContrastiveModel(nn.Module):
-    def __init__(self, model, num_labels):
+class ContrastiveModel(
+    nn.Module, PyTorchModelHubMixin, pipeline_tag="text-classification"
+):
+    def __init__(self, model_name_or_path, num_labels):
         super(ContrastiveModel, self).__init__()
-        self.model = model
+        self.model_name_or_path = model_name_or_path
+        self.model = AutoModel.from_pretrained(args.model_name_or_path)
         self.num_labels = num_labels
-        self.embedding_dim = model.config.hidden_size
+        self.embedding_dim = self.model.config.hidden_size
         self.fc = nn.Linear(self.embedding_dim, self.embedding_dim)
         self.classifier = nn.Linear(
             self.embedding_dim, self.num_labels
@@ -20,9 +24,16 @@ class ContrastiveModel(nn.Module):
 
     def forward(self, input_ids, attention_mask):
         outputs = self.model(input_ids, attention_mask)
-        embeddings = outputs.last_hidden_state[
-            :, 0
-        ]  # Use the CLS token embedding as the representation
+
+        # Some models do not provide a pooler_output, use last_hidden_state if that is the case
+        if hasattr(outputs, "last_hidden_state"):
+            embeddings = outputs.last_hidden_state.mean(dim=1)
+        else:
+            embeddings = outputs.pooler_output
+
+        # We can use the CLS token as well with
+        # embeddings = outputs.last_hidden_state[ :, 0 ]
+
         embeddings = self.fc(embeddings)
         logits = self.classifier(embeddings)  # Apply classification layer
 
@@ -45,38 +56,34 @@ class ContrastiveLoss(nn.Module):
 
 
 class ContrastiveDataset(Dataset):
-    def __init__(
-        self, texts1, texts2, labels, features, tokenizer, max_length1=512, max_length2=512
-    ):
-        self.texts1 = texts1
-        self.texts2 = texts2
+
+    def __init__(self, texts, labels, labels_cont, tokenizer, max_length=512):
+        self.texts = texts
         self.labels = labels
-        self.features = features
+        self.labels_cont = labels_cont
         self.tokenizer = tokenizer
-        self.max_length1 = max_length1
-        self.max_length2 = max_length2
+        self.max_length = max_length
 
     def __len__(self):
-        return len(self.texts1)
+        return len(self.texts)
 
     def __getitem__(self, idx):
-        text1 = self.texts1[idx]
-        text2 = self.texts2[idx]
+        text1, text2 = self.texts[idx]
         labels = self.labels[idx]
-        features = self.features[idx]
+        labels_cont = self.labels_cont[idx]
 
         inputs1 = self.tokenizer(
             text1,
             truncation=True,
             padding="max_length",
-            max_length=self.max_length1,
+            max_length=self.max_length,
             return_tensors="pt",
         )
         inputs2 = self.tokenizer(
             text2,
             truncation=True,
             padding="max_length",
-            max_length=self.max_length2,
+            max_length=self.max_length,
             return_tensors="pt",
         )
 
@@ -90,7 +97,7 @@ class ContrastiveDataset(Dataset):
             attention_mask1,
             input_ids2,
             attention_mask2,
-            torch.tensor(features, dtype=torch.float),
+            torch.tensor(labels_cont, dtype=torch.float),
             torch.tensor(labels, dtype=torch.float),
         )
 
@@ -206,3 +213,86 @@ def fit_constrastive(
             repo_type="model",
         )
         os.remove(history_filename)
+
+
+def create_pos_pairs(data, threshold):
+    imp_df = data[data["implicitness"] == "yes"]
+    exp_df = data[data["implicitness"] == "no"]
+
+    pos_pairs = []
+    for row_id, imp_row in tqdm(imp_df.iterrows(), total=len(imp_df)):
+        imp_text = imp_row["text"]
+        imp_IS = imp_row["IS_prep"]
+        imp_target = imp_row["target"]
+        pairs = []
+        exp_same_target = exp_df[exp_df["target"] == imp_target]
+        for _, exp_row in exp_same_target.iterrows():
+            exp_text = exp_row["text"]
+
+            imp_IS_emb = imp_row["IS_emb"]
+            exp_emb = exp_row["text_emb"]
+
+            cos_sim = euclidean_distances([imp_IS_emb], [exp_emb])
+            if (1 - cos_sim) < threshold:
+                pairs.append((row_id, imp_text, exp_text, imp_IS))
+
+        pos_pairs.append(pairs)
+
+    return pos_pairs
+
+
+def create_neg_pairs(data, nof_neg_pairs, random_state):
+    imp_hs_df = df[(df["label"] == "hs") & (df["implicitness"] == "yes")]
+    non_hs_df = df[df["label"] == "non-hs"]
+
+    hs_df = imp_hs_df.sample(
+        nof_negative_pairs, replace=True, random_state=random_state
+    )
+    non_hs_df = non_hs_df.sample(
+        nof_negative_pairs, replace=True, random_state=random_state
+    )
+
+    # Create negative pairs (HS, Non-HS)
+    neg_pairs = []
+
+    for _, non_hs_row in non_hs_df.iterrows():
+        non_hs_message = non_hs_row["text"]
+
+        # Randomly choose a HS message as the negative pair
+        imp_hs_message = np.random.choice(imp_hs_df["text"])
+
+        if (non_hs_message is not None) and (imp_hs_message is not None):
+            # Append negative pair to the list
+            neg_pairs.append((imp_hs_message, non_hs_message))
+
+    return neg_pairs
+
+
+def prepare_cont_data(data, tokenizer, max_length, batch_size, do_shuffle):
+    pos_pairs = create_pos_pairs(data=data, treshold=cfg.input.pos_pairs_threshold)
+    neg_pairs = create_neg_pairs(
+        data=dev, nof_neg_pairs=cfg.input.nof_neg_pairs, random_state=cfg.input.seed
+    )
+
+    all_pairs = pos_pairs + neg_pairs
+
+    labels_cont = torch.tensor([1] * len(pos_pairs) + [0] * len(neg_pairs))
+    labels_clf = torch.tensor(
+        [
+            [1] * len(pos_pairs) + [1] * len(neg_pairs),
+            [1] * len(pos_pairs) + [0] * len(neg_pairs),
+        ]
+    )
+    labels_clf = labels_clf.T
+
+    dataset = ContrastiveDataset(
+        texts=all_pairs,
+        labels=labels_clf,
+        labels_cont=labels_cont,
+        tokenizer=tokenizer,
+        max_length=max_length,
+    )
+
+    dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=do_shuffle)
+
+    return dataloader

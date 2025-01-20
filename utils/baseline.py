@@ -11,7 +11,7 @@ from utils.helpers import multi_label_metrics, predicted_labels_from_logits
 
 
 class BaselineDataset(Dataset):
-    def __init__(self, texts, labels, tokenizer, max_length):
+    def __init__(self, texts, labels, tokenizer, max_length=512):
         self.texts = texts
         self.labels = labels
         self.tokenizer = tokenizer
@@ -149,3 +149,15 @@ def evaluate(model, dataloader, device, criterion):
     metrics = multi_label_metrics(logits=all_logits, labels=all_labels)
     y_pred = predicted_labels_from_logits(logits=all_logits, threshold=0.5)
     return metrics, all_labels, y_pred, avg_loss
+
+
+def prepare_data(data, tokenizer, max_length, batch_size, do_shuffle):
+    texts, labels = data["text"], data["label"].replace({"hs":1, "non-hs":0})
+
+    dataset = BaselineDataset(
+        texts=texts, labels=labels, tokenizer=tokenizer, max_length=max_length
+    )
+
+    dataloader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=do_shuffle
+    )

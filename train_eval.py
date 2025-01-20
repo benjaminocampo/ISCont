@@ -74,7 +74,7 @@ def run_experiment(cfg: DictConfig, run: mlflow.ActiveRun):
     torch.cuda.empty_cache()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model_name = f"{cfg.train.model.params.model_name_or_path.replace('/', '_')}_seed-{cfg.model.params.seed}_finetuned"
+    model_name = f"{cfg.input.run_name}_seed-{cfg.model.params.seed}_finetuned"
 
     logger.info("Command-line Arguments:")
     logger.info(f"Raw command-line arguments: {' '.join(map(shlex.quote, sys.argv))}")
@@ -83,45 +83,39 @@ def run_experiment(cfg: DictConfig, run: mlflow.ActiveRun):
     dev = pd.read_parquet(cfg.input.dev_file)
     test = pd.read_parquet(cfg.input.test_file)
 
-    train = train.sample(100, ignore_index=True)
-    dev = dev.sample(100, ignore_index=True)
-    test = test.sample(100, ignore_index=True)
-
-    x_train, y_train = train["text"], train["label"].replace({"hs": 1, "non-hs": 0})
-    x_dev, y_dev = dev["text"], dev["label"].replace({"hs": 1, "non-hs": 0})
-    x_test, y_test = test["text"], test["label"].replace({"hs": 1, "non-hs": 0})
-
-    if cfg.input.train_size is not None:
-        x_train, _, y_train, _ = train_test_split(
-            x_train, y_train, train_size=cfg.input.train_size
-        )
+    train = train["label"].replace({"hs": 1, "non-hs": 0})
+    dev = dev["label"].replace({"hs": 1, "non-hs": 0})
+    test = test["label"].replace({"hs": 1, "non-hs": 0})
 
     tokenizer = AutoTokenizer.from_pretrained(cfg.train.model.params.model_name_or_path)
 
-    train_dataset = cfg.train.model.data_module(
-        texts=x_train, labels=y_train, tokenizer=tokenizer, max_length=128
+    train_dataloader = cfg.train.model.data_module(
+        data=train,
+        tokenizer=tokenizer,
+        max_length=cfg.model.params.max_length,
+        batch_size=cfg.model.params.batch_size,
+        do_shuffle=True,
     )
 
-    dev_dataset = cfg.train.model.data_module(
-        texts=x_dev, labels=y_dev, tokenizer=tokenizer, max_length=128
+    dev_dataloader = cfg.train.model.data_module(
+        data=dev,
+        tokenizer=tokenizer,
+        max_length=cfg.model.params.max_length,
+        batch_size=cfg.model.params.batch_size,
+        do_shuffle=False,
     )
 
-    test_dataset = cfg.train.model.data_module(
-        texts=x_test, labels=y_test, tokenizer=tokenizer, max_length=128
-    )
-
-    train_dataloader = DataLoader(
-        train_dataset, batch_size=cfg.model.params.batch_size, shuffle=True
-    )
-    dev_dataloader = DataLoader(
-        dev_dataset, batch_size=cfg.model.params.batch_size, shuffle=False
-    )
-    test_dataloader = DataLoader(
-        test_dataset, batch_size=cfg.model.params.batch_size, shuffle=False
+    test_dataloader = cfg.train.model.data_module(
+        data=test,
+        tokenizer=tokenizer,
+        max_length=cfg.model.params.max_length,
+        batch_size=cfg.model.params.batch_size,
+        do_shuffle=False,
     )
 
     model = cfg.train.model.module(
-        cfg.train.model.params.model_name_or_path, num_labels=cfg.model.params.num_labels
+        cfg.train.model.params.model_name_or_path,
+        num_labels=cfg.model.params.num_labels,
     )
     optimizer = AdamW(model.parameters(), lr=cfg.model.params.learning_rate)
     total_steps = len(train_dataloader) * cfg.model.params.num_epochs
