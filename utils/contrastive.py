@@ -4,7 +4,7 @@ import json
 from sklearn.metrics.pairwise import euclidean_distances
 from torch import nn
 from tqdm import tqdm
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from huggingface_hub import HfApi, HfFolder, PyTorchModelHubMixin
 
 
@@ -122,6 +122,8 @@ def fit_constrastive(
     history = {
         "train_loss": [],
         "dev_loss": [],
+        "dev_cont_loss": [],
+        "dev_clf_loss": [],
         "dev_f1": [],
         "dev_accuracy": [],
         "dev_precision": [],
@@ -148,28 +150,28 @@ def fit_constrastive(
                 labels_clf,
             ) = [item.to(device) for item in batch]
 
-        optimizer.zero_grad()
+            optimizer.zero_grad()
 
-        embeddings1, logits1 = contrastive_model(input_ids1, attention_mask1)
-        embeddings2, logits2 = contrastive_model(input_ids2, attention_mask2)
+            logits1, embeddings1 = contrastive_model(input_ids1, attention_mask1)
+            logits2, embeddings2 = contrastive_model(input_ids2, attention_mask2)
 
-        cont_loss = cont_criterion(embeddings1, embeddings2, labels_cont)
-        clf_loss = criterion(logits1, labels_clf[:, 0]) + criterion(
-            logits2, labels_clf[:, 1]
-        )
-        loss = cont_loss + clf_loss
+            cont_loss = cont_criterion(embeddings1, embeddings2, labels_cont)
+            clf_loss = criterion(logits1, labels_clf[:, 0]) + criterion(
+                logits2, labels_clf[:, 1]
+            )
+            loss = cont_loss + clf_loss
 
-        loss.backward()
-        optimizer.step()
-        scheduler.step()
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
 
-        total_cont_loss += cont_loss.item()
-        total_clf_loss += clf_loss.item()
-        total_loss += loss.item()
+            total_cont_loss += cont_loss.item()
+            total_clf_loss += clf_loss.item()
+            total_loss += loss.item()
 
         avg_loss = total_loss / len(train_dataloader)
-        avg_cont_loss = total_cont_loss / len(data_loader)
-        avg_clf_loss = total_clf_loss / len(data_loader)
+        avg_cont_loss = total_cont_loss / len(train_data_loader)
+        avg_clf_loss = total_clf_loss / len(train_data_loader)
 
         print(
             f"Epoch {epoch + 1}/{num_epochs}, Loss: {avg_loss:.4f}, Cont Loss: {avg_cont_loss:.4f}, CLF Loss: {avg_clf_loss:.4f}"
@@ -177,10 +179,11 @@ def fit_constrastive(
 
         print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {avg_loss:.4f}")
 
-        dev_metrics, _, _, dev_loss = evaluate(
+        dev_metrics, _, _, dev_loss, dev_cont_loss, dev_clf_loss = evaluate_contrastive(
             model=model,
             dataloader=dev_dataloader,
             device=device,
+            cont_criterion=cont_criterion,
             criterion=criterion,
         )
 
@@ -188,6 +191,8 @@ def fit_constrastive(
 
         history["train_loss"].append(avg_loss)
         history["dev_loss"].append(dev_loss)
+        history["dev_cont_loss"].append(dev_loss)
+        history["dev_clf_loss"].append(dev_loss)
         history["dev_f1"].append(dev_metrics["f1"])
         history["dev_accuracy"].append(dev_metrics["accuracy"])
         history["dev_precision"].append(dev_metrics["precision"])
@@ -215,17 +220,68 @@ def fit_constrastive(
         os.remove(history_filename)
 
 
-def create_pos_pairs(data, threshold):
+def evaluate_contrastive(model, dataloader, device, criterion):
+    model = model.to(device)
+    model.eval()
+    cont_criterion = ContrastiveLoss()
+
+    total_loss = 0
+    all_logits = []
+    all_labels = []
+
+    with torch.no_grad():
+        for batch in dataloader:
+            (
+                input_ids1,
+                attention_mask1,
+                input_ids2,
+                attention_mask2,
+                labels_cont,
+                labels_clf,
+            ) = [item.to(device) for item in batch]
+
+            logits1, embeddings1 = model(input_ids1, attention_mask)
+            logits2, embeddings2 = model(input_ids2, attention_mask)
+
+            cont_loss = cont_criterion(embeddings1, embeddings2, labels_cont)
+            clf_loss = criterion(logits1, labels_clf[:, 0]) + criterion(
+                logits2, labels_clf[:, 1]
+            )
+            loss = cont_loss + clf_loss
+            total_cont_loss += cont_loss.item()
+            total_clf_loss += clf_loss.item()
+            total_loss += loss.item()
+
+            all_logits.append(logits.cpu().numpy())
+            all_labels.append(labels.cpu().numpy())
+
+    all_logits = np.concatenate(all_logits, axis=0)
+    all_labels = np.concatenate(all_labels, axis=0)
+    avg_loss = total_loss / len(dataloader)
+    avg_cont_loss = total_cont_loss / len(data_loader)
+    avg_clf_loss = total_clf_loss / len(data_loader)
+
+    metrics = multi_label_metrics(logits=all_logits, labels=all_labels)
+    y_pred = predicted_labels_from_logits(logits=all_logits, threshold=0.5)
+    return metrics, all_labels, y_pred, avg_loss, avg_cont_loss, avg_clf_loss
+
+
+def create_pos_pairs(data, threshold, drop_ids_and_IS=True):
     imp_df = data[data["implicitness"] == "yes"]
     exp_df = data[data["implicitness"] == "no"]
 
     pos_pairs = []
-    for row_id, imp_row in tqdm(imp_df.iterrows(), total=len(imp_df)):
+    for row_id, imp_row in tqdm(
+        imp_df.iterrows(),
+        desc="Creating positive pairs",
+        bar_format="{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt}",
+        total=len(imp_df),
+    ):
         imp_text = imp_row["text"]
         imp_IS = imp_row["IS_prep"]
-        imp_target = imp_row["target"]
-        pairs = []
-        exp_same_target = exp_df[exp_df["target"] == imp_target]
+        imp_target = imp_row["sanitized_target"]
+        # pairs = []
+        exp_same_target = exp_df[exp_df["sanitized_target"] == imp_target]
         for _, exp_row in exp_same_target.iterrows():
             exp_text = exp_row["text"]
 
@@ -234,45 +290,45 @@ def create_pos_pairs(data, threshold):
 
             cos_sim = euclidean_distances([imp_IS_emb], [exp_emb])
             if (1 - cos_sim) < threshold:
-                pairs.append((row_id, imp_text, exp_text, imp_IS))
+                pos_pairs.append((row_id, imp_text, exp_text, imp_IS))
 
-        pos_pairs.append(pairs)
+        # pos_pairs.append(pairs)
+    if drop_ids_and_IS:
+        pos_pairs = [(t[1], t[2]) for t in pos_pairs]
 
     return pos_pairs
 
 
-def create_neg_pairs(data, nof_neg_pairs, random_state):
-    imp_hs_df = df[(df["label"] == "hs") & (df["implicitness"] == "yes")]
-    non_hs_df = df[df["label"] == "non-hs"]
+def create_neg_pairs(data):
+    imp_hs_df = data[(data["label"] == 1) & (data["implicitness"] == "yes")]
+    non_hs_df = data[data["label"] == 0]
 
-    hs_df = imp_hs_df.sample(
-        nof_negative_pairs, replace=True, random_state=random_state
-    )
-    non_hs_df = non_hs_df.sample(
-        nof_negative_pairs, replace=True, random_state=random_state
-    )
-
-    # Create negative pairs (HS, Non-HS)
     neg_pairs = []
 
-    for _, non_hs_row in non_hs_df.iterrows():
-        non_hs_message = non_hs_row["text"]
+    for _, hs_row in tqdm(
+        imp_hs_df.iterrows(),
+        desc="Creating negative pairs",
+        bar_format="{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt}",
+        total=len(imp_hs_df),
+    ):
+        imp_hs_message = hs_row["text"]
+        imp_hs_target = hs_row["sanitized_target"]
+        non_hs_same_target = non_hs_df[non_hs_df["sanitized_target"] == imp_hs_target]
+        for _, non_hs_row in non_hs_same_target.iterrows():
+            non_hs_message = non_hs_row["text"]
 
-        # Randomly choose a HS message as the negative pair
-        imp_hs_message = np.random.choice(imp_hs_df["text"])
-
-        if (non_hs_message is not None) and (imp_hs_message is not None):
-            # Append negative pair to the list
-            neg_pairs.append((imp_hs_message, non_hs_message))
+            if (non_hs_message is not None) and (imp_hs_message is not None):
+                # Append negative pair to the list
+                neg_pairs.append((imp_hs_message, non_hs_message))
 
     return neg_pairs
 
 
-def prepare_cont_data(data, tokenizer, max_length, batch_size, do_shuffle):
-    pos_pairs = create_pos_pairs(data=data, treshold=cfg.input.pos_pairs_threshold)
-    neg_pairs = create_neg_pairs(
-        data=dev, nof_neg_pairs=cfg.input.nof_neg_pairs, random_state=cfg.input.seed
-    )
+def prepare_cont_data(
+    data, tokenizer, max_length, batch_size, do_shuffle, threshold=1e-1
+):
+    pos_pairs = create_pos_pairs(data=data, threshold=threshold)
+    neg_pairs = create_neg_pairs(data=data)
 
     all_pairs = pos_pairs + neg_pairs
 

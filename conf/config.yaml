@@ -7,7 +7,7 @@ input:
   dev_file: "./data/ihc_dev.parquet.gzip"
   test_file: "./data/ihc_test.parquet.gzip"
   train_size: null
-  run_name: ??
+  run_name: ???
   uri_path: null
   experiment_name: "Hypothesis 1: Base Loss VS Cont Loss w/ IS"
   experiment_description: "**Hypothesis 1:** Contrastive Learning with Implied Statement improves CLF results on Hate Speech Detection"
@@ -18,9 +18,9 @@ model:
   params:
     batch_size: 4
     learning_rate: 2e-5
-    num_epochs: 1
+    num_epochs: 4
     seed: 42
     main_metric: "f1"
     threshold: 0.5
     num_labels: 2
-
+    max_length: 512

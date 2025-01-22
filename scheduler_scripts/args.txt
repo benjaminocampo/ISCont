@@ -1,10 +1,20 @@
-train/model=bert input.run_name=bert-baseline-seed-42 model.params.seed=42
-train/model=bert input.run_name=bert-baseline-seed-43 model.params.seed=43
-train/model=bert input.run_name=bert-baseline-seed-44 model.params.seed=44
-train/model=bert input.run_name=bert-baseline-seed-45 model.params.seed=45
-train/model=bert input.run_name=bert-baseline-seed-46 model.params.seed=46
-train/model=hatebert input.run_name=hatebert-baseline-seed-42 model.params.seed=42
-train/model=hatebert input.run_name=hatebert-baseline-seed-43 model.params.seed=43
-train/model=hatebert input.run_name=hatebert-baseline-seed-44 model.params.seed=44
-train/model=hatebert input.run_name=hatebert-baseline-seed-45 model.params.seed=45
-train/model=hatebert input.run_name=hatebert-baseline-seed-46 model.params.seed=46
+train/model=bert input.run_name=ihc-bert-baseline-seed-42 model.params.seed=42 input.train_file="./data/ihc_train.parquet.gzip" input.dev_file="./data/ihc_dev.parquet.gzip" input.test_file="./data/ihc_test.parquet.gzip"
+train/model=bert input.run_name=ihc-bert-baseline-seed-43 model.params.seed=43 input.train_file="./data/ihc_train.parquet.gzip" input.dev_file="./data/ihc_dev.parquet.gzip" input.test_file="./data/ihc_test.parquet.gzip"
+train/model=bert input.run_name=ihc-bert-baseline-seed-44 model.params.seed=44 input.train_file="./data/ihc_train.parquet.gzip" input.dev_file="./data/ihc_dev.parquet.gzip" input.test_file="./data/ihc_test.parquet.gzip"
+train/model=bert input.run_name=ihc-bert-baseline-seed-45 model.params.seed=45 input.train_file="./data/ihc_train.parquet.gzip" input.dev_file="./data/ihc_dev.parquet.gzip" input.test_file="./data/ihc_test.parquet.gzip"
+train/model=bert input.run_name=ihc-bert-baseline-seed-46 model.params.seed=46 input.train_file="./data/ihc_train.parquet.gzip" input.dev_file="./data/ihc_dev.parquet.gzip" input.test_file="./data/ihc_test.parquet.gzip"
+train/model=hatebert input.run_name=ihc-hatebert-baseline-seed-42 model.params.seed=42 input.train_file="./data/ihc_train.parquet.gzip" input.dev_file="./data/ihc_dev.parquet.gzip" input.test_file="./data/ihc_test.parquet.gzip"
+train/model=hatebert input.run_name=ihc-hatebert-baseline-seed-43 model.params.seed=43 input.train_file="./data/ihc_train.parquet.gzip" input.dev_file="./data/ihc_dev.parquet.gzip" input.test_file="./data/ihc_test.parquet.gzip"
+train/model=hatebert input.run_name=ihc-hatebert-baseline-seed-44 model.params.seed=44 input.train_file="./data/ihc_train.parquet.gzip" input.dev_file="./data/ihc_dev.parquet.gzip" input.test_file="./data/ihc_test.parquet.gzip"
+train/model=hatebert input.run_name=ihc-hatebert-baseline-seed-45 model.params.seed=45 input.train_file="./data/ihc_train.parquet.gzip" input.dev_file="./data/ihc_dev.parquet.gzip" input.test_file="./data/ihc_test.parquet.gzip"
+train/model=hatebert input.run_name=ihc-hatebert-baseline-seed-46 model.params.seed=46 input.train_file="./data/ihc_train.parquet.gzip" input.dev_file="./data/ihc_dev.parquet.gzip" input.test_file="./data/ihc_test.parquet.gzip"
+train/model=bert input.run_name=sbic-bert-baseline-seed-42 model.params.seed=42 input.train_file="./data/sbic_train.parquet.gzip" input.dev_file="./data/sbic_dev.parquet.gzip" input.test_file="./data/sbic_test.parquet.gzip"
+train/model=bert input.run_name=sbic-bert-baseline-seed-43 model.params.seed=43 input.train_file="./data/sbic_train.parquet.gzip" input.dev_file="./data/sbic_dev.parquet.gzip" input.test_file="./data/sbic_test.parquet.gzip"
+train/model=bert input.run_name=sbic-bert-baseline-seed-44 model.params.seed=44 input.train_file="./data/sbic_train.parquet.gzip" input.dev_file="./data/sbic_dev.parquet.gzip" input.test_file="./data/sbic_test.parquet.gzip"
+train/model=bert input.run_name=sbic-bert-baseline-seed-45 model.params.seed=45 input.train_file="./data/sbic_train.parquet.gzip" input.dev_file="./data/sbic_dev.parquet.gzip" input.test_file="./data/sbic_test.parquet.gzip"
+train/model=bert input.run_name=sbic-bert-baseline-seed-46 model.params.seed=46 input.train_file="./data/sbic_train.parquet.gzip" input.dev_file="./data/sbic_dev.parquet.gzip" input.test_file="./data/sbic_test.parquet.gzip"
+train/model=hatebert input.run_name=sbic-hatebert-baseline-seed-42 model.params.seed=42 input.train_file="./data/sbic_train.parquet.gzip" input.dev_file="./data/sbic_dev.parquet.gzip" input.test_file="./data/sbic_test.parquet.gzip"
+train/model=hatebert input.run_name=sbic-hatebert-baseline-seed-43 model.params.seed=43 input.train_file="./data/sbic_train.parquet.gzip" input.dev_file="./data/sbic_dev.parquet.gzip" input.test_file="./data/sbic_test.parquet.gzip"
+train/model=hatebert input.run_name=sbic-hatebert-baseline-seed-44 model.params.seed=44 input.train_file="./data/sbic_train.parquet.gzip" input.dev_file="./data/sbic_dev.parquet.gzip" input.test_file="./data/sbic_test.parquet.gzip"
+train/model=hatebert input.run_name=sbic-hatebert-baseline-seed-45 model.params.seed=45 input.train_file="./data/sbic_train.parquet.gzip" input.dev_file="./data/sbic_dev.parquet.gzip" input.test_file="./data/sbic_test.parquet.gzip"
+train/model=hatebert input.run_name=sbic-hatebert-baseline-seed-46 model.params.seed=46 input.train_file="./data/sbic_train.parquet.gzip" input.dev_file="./data/sbic_dev.parquet.gzip" input.test_file="./data/sbic_test.parquet.gzip"

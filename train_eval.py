@@ -40,9 +40,9 @@ from huggingface_hub import login, HfApi, HfFolder
 from dotenv import load_dotenv
 from transformers import AutoModelForSequenceClassification
 
-from utils.baseline import BaselineDataset, fit, evaluate
+from utils.baseline import fit, evaluate, prepare_data
 from utils.helpers import flatten_dict, set_seed
-from utils.contrastive import fit_constrastive
+from utils.contrastive import fit_constrastive, prepare_cont_data
 
 load_dotenv()
 
@@ -74,7 +74,7 @@ def run_experiment(cfg: DictConfig, run: mlflow.ActiveRun):
     torch.cuda.empty_cache()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model_name = f"{cfg.input.run_name}_seed-{cfg.model.params.seed}_finetuned"
+    model_name = f"{cfg.input.run_name}_finetuned"
 
     logger.info("Command-line Arguments:")
     logger.info(f"Raw command-line arguments: {' '.join(map(shlex.quote, sys.argv))}")
@@ -83,13 +83,17 @@ def run_experiment(cfg: DictConfig, run: mlflow.ActiveRun):
     dev = pd.read_parquet(cfg.input.dev_file)
     test = pd.read_parquet(cfg.input.test_file)
 
-    train = train["label"].replace({"hs": 1, "non-hs": 0})
-    dev = dev["label"].replace({"hs": 1, "non-hs": 0})
-    test = test["label"].replace({"hs": 1, "non-hs": 0})
+    train = train.sample(100, ignore_index=True)
+    dev = dev.sample(100, ignore_index=True)
+    test = test.sample(100, ignore_index=True)
+
+    train["label"] = train["label"].replace({"hs": 1, "non-hs": 0})
+    dev["label"] = dev["label"].replace({"hs": 1, "non-hs": 0})
+    test["label"] = test["label"].replace({"hs": 1, "non-hs": 0})
 
     tokenizer = AutoTokenizer.from_pretrained(cfg.train.model.params.model_name_or_path)
 
-    train_dataloader = cfg.train.model.data_module(
+    train_dataloader = cfg.train.model.data_module_train(
         data=train,
         tokenizer=tokenizer,
         max_length=cfg.model.params.max_length,
@@ -97,7 +101,7 @@ def run_experiment(cfg: DictConfig, run: mlflow.ActiveRun):
         do_shuffle=True,
     )
 
-    dev_dataloader = cfg.train.model.data_module(
+    dev_dataloader = cfg.train.model.data_module_dev(
         data=dev,
         tokenizer=tokenizer,
         max_length=cfg.model.params.max_length,
@@ -105,7 +109,7 @@ def run_experiment(cfg: DictConfig, run: mlflow.ActiveRun):
         do_shuffle=False,
     )
 
-    test_dataloader = cfg.train.model.data_module(
+    test_dataloader = cfg.train.model.data_module_test(
         data=test,
         tokenizer=tokenizer,
         max_length=cfg.model.params.max_length,
@@ -128,7 +132,7 @@ def run_experiment(cfg: DictConfig, run: mlflow.ActiveRun):
 
         start_time = time.time()
 
-        fit(
+        cfg.train.model.fit_module(
             model=model,
             train_dataloader=train_dataloader,
             dev_dataloader=dev_dataloader,
@@ -152,12 +156,12 @@ def run_experiment(cfg: DictConfig, run: mlflow.ActiveRun):
             f"BenjaminOcampo/{model_name}"
         )
 
-        dev_metrics, dev_labels, dev_predictions, _ = evaluate(
+        dev_metrics, dev_labels, dev_predictions, _ = cfg.train.model.evaluate_module_dev(
             model, dev_dataloader, device, criterion=nn.CrossEntropyLoss()
         )
         print(dev_metrics)
 
-        test_metrics, test_labels, test_predictions, _ = evaluate(
+        test_metrics, test_labels, test_predictions, _ = cfg.train.model.evaluate_module_test(
             model, test_dataloader, device, criterion=nn.CrossEntropyLoss()
         )
         print(test_metrics)
@@ -172,8 +176,8 @@ def run_experiment(cfg: DictConfig, run: mlflow.ActiveRun):
         )
         mlflow.set_tag("mlflow.note.content", report)
 
-        mlflow.log_metrics(dev_metrics)
-        mlflow.log_metrics(test_metrics)
+        mlflow.log_metrics({f"dev_{k}": m for k, m in dev_metrics.items()})
+        mlflow.log_metrics({f"test_{k}": m for k, m in test_metrics.items()})
 
     logger.info("Experiment finished succesfully.")
 

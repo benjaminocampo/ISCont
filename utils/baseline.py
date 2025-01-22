@@ -4,7 +4,7 @@ import json
 import os
 from torch import nn
 from tqdm import tqdm
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from huggingface_hub import HfApi, HfFolder
 
 from utils.helpers import multi_label_metrics, predicted_labels_from_logits
@@ -137,9 +137,15 @@ def evaluate(model, dataloader, device, criterion):
             input_ids, attention_mask, labels = [item.to(device) for item in batch]
 
             outputs = model(input_ids, attention_mask)
-            all_logits.append(outputs.logits.cpu().numpy())
+
+            if isinstance(outputs, tuple):
+                logits, _ = outputs
+            else:
+                logits = outputs.logits
+
+            all_logits.append(logits.cpu().numpy())
             all_labels.append(labels.cpu().numpy())
-            loss = criterion(outputs.logits, labels.long())
+            loss = criterion(logits, labels.long())
             total_loss += loss.item()
 
     all_logits = np.concatenate(all_logits, axis=0)
@@ -152,12 +158,13 @@ def evaluate(model, dataloader, device, criterion):
 
 
 def prepare_data(data, tokenizer, max_length, batch_size, do_shuffle):
-    texts, labels = data["text"], data["label"].replace({"hs":1, "non-hs":0})
+    texts, labels = data["text"], data["label"]
 
     dataset = BaselineDataset(
         texts=texts, labels=labels, tokenizer=tokenizer, max_length=max_length
     )
 
     dataloader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=do_shuffle
+        dataset, batch_size=batch_size, shuffle=do_shuffle
     )
+    return dataloader
