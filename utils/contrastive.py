@@ -1,11 +1,14 @@
 import torch
 import numpy as np
 import json
+import os
 from sklearn.metrics.pairwise import euclidean_distances
 from torch import nn
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 from huggingface_hub import HfApi, HfFolder, PyTorchModelHubMixin
+from transformers import AutoModel
+from utils.helpers import multi_label_metrics, predicted_labels_from_logits
 
 
 class ContrastiveModel(
@@ -14,7 +17,7 @@ class ContrastiveModel(
     def __init__(self, model_name_or_path, num_labels):
         super(ContrastiveModel, self).__init__()
         self.model_name_or_path = model_name_or_path
-        self.model = AutoModel.from_pretrained(args.model_name_or_path)
+        self.model = AutoModel.from_pretrained(self.model_name_or_path)
         self.num_labels = num_labels
         self.embedding_dim = self.model.config.hidden_size
         self.fc = nn.Linear(self.embedding_dim, self.embedding_dim)
@@ -41,7 +44,7 @@ class ContrastiveModel(
 
 
 class ContrastiveLoss(nn.Module):
-    def __init__(self, margin):
+    def __init__(self, margin=0.5):
         super(ContrastiveLoss, self).__init__()
         self.margin = margin
         self.cosine_similarity = nn.CosineSimilarity(dim=1)
@@ -102,7 +105,7 @@ class ContrastiveDataset(Dataset):
         )
 
 
-def fit_constrastive(
+def fit_contrastive(
     model,
     train_dataloader,
     dev_dataloader,
@@ -152,12 +155,12 @@ def fit_constrastive(
 
             optimizer.zero_grad()
 
-            logits1, embeddings1 = contrastive_model(input_ids1, attention_mask1)
-            logits2, embeddings2 = contrastive_model(input_ids2, attention_mask2)
+            logits1, embeddings1 = model(input_ids1, attention_mask1)
+            logits2, embeddings2 = model(input_ids2, attention_mask2)
 
             cont_loss = cont_criterion(embeddings1, embeddings2, labels_cont)
-            clf_loss = criterion(logits1, labels_clf[:, 0]) + criterion(
-                logits2, labels_clf[:, 1]
+            clf_loss = criterion(logits1, labels_clf[:, 0].long()) + criterion(
+                logits2, labels_clf[:, 1].long()
             )
             loss = cont_loss + clf_loss
 
@@ -170,20 +173,17 @@ def fit_constrastive(
             total_loss += loss.item()
 
         avg_loss = total_loss / len(train_dataloader)
-        avg_cont_loss = total_cont_loss / len(train_data_loader)
-        avg_clf_loss = total_clf_loss / len(train_data_loader)
+        avg_cont_loss = total_cont_loss / len(train_dataloader)
+        avg_clf_loss = total_clf_loss / len(train_dataloader)
 
         print(
             f"Epoch {epoch + 1}/{num_epochs}, Loss: {avg_loss:.4f}, Cont Loss: {avg_cont_loss:.4f}, CLF Loss: {avg_clf_loss:.4f}"
         )
 
-        print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {avg_loss:.4f}")
-
         dev_metrics, _, _, dev_loss, dev_cont_loss, dev_clf_loss = evaluate_contrastive(
             model=model,
             dataloader=dev_dataloader,
             device=device,
-            cont_criterion=cont_criterion,
             criterion=criterion,
         )
 
@@ -226,6 +226,8 @@ def evaluate_contrastive(model, dataloader, device, criterion):
     cont_criterion = ContrastiveLoss()
 
     total_loss = 0
+    total_cont_loss = 0
+    total_clf_loss = 0
     all_logits = []
     all_labels = []
 
@@ -240,26 +242,32 @@ def evaluate_contrastive(model, dataloader, device, criterion):
                 labels_clf,
             ) = [item.to(device) for item in batch]
 
-            logits1, embeddings1 = model(input_ids1, attention_mask)
-            logits2, embeddings2 = model(input_ids2, attention_mask)
+            logits1, embeddings1 = model(input_ids1, attention_mask1)
+            logits2, embeddings2 = model(input_ids2, attention_mask2)
 
             cont_loss = cont_criterion(embeddings1, embeddings2, labels_cont)
-            clf_loss = criterion(logits1, labels_clf[:, 0]) + criterion(
-                logits2, labels_clf[:, 1]
+            clf_loss = criterion(logits1, labels_clf[:, 0].long()) + criterion(
+                logits2, labels_clf[:, 1].long()
             )
             loss = cont_loss + clf_loss
             total_cont_loss += cont_loss.item()
             total_clf_loss += clf_loss.item()
             total_loss += loss.item()
 
-            all_logits.append(logits.cpu().numpy())
-            all_labels.append(labels.cpu().numpy())
+            all_logits.append(
+                np.concatenate([logits1.cpu().numpy(), logits2.cpu().numpy()], axis=0)
+            )
+            all_labels.append(
+                np.concatenate(
+                    [labels_clf[:, 0].cpu().numpy(), labels_clf[:, 1].cpu().numpy()]
+                )
+            )
 
     all_logits = np.concatenate(all_logits, axis=0)
     all_labels = np.concatenate(all_labels, axis=0)
     avg_loss = total_loss / len(dataloader)
-    avg_cont_loss = total_cont_loss / len(data_loader)
-    avg_clf_loss = total_clf_loss / len(data_loader)
+    avg_cont_loss = total_cont_loss / len(dataloader)
+    avg_clf_loss = total_clf_loss / len(dataloader)
 
     metrics = multi_label_metrics(logits=all_logits, labels=all_labels)
     y_pred = predicted_labels_from_logits(logits=all_logits, threshold=0.5)
@@ -323,6 +331,7 @@ def create_neg_pairs(data):
 
     return neg_pairs
 
+import random
 
 def prepare_cont_data(
     data, tokenizer, max_length, batch_size, do_shuffle, threshold=1e-1
@@ -330,6 +339,10 @@ def prepare_cont_data(
     pos_pairs = create_pos_pairs(data=data, threshold=threshold)
     neg_pairs = create_neg_pairs(data=data)
 
+    print(len(pos_pairs))
+    print(len(neg_pairs))
+    pos_pairs = random.sample(pos_pairs, 500)
+    neg_pairs = random.sample(neg_pairs, 500)
     all_pairs = pos_pairs + neg_pairs
 
     labels_cont = torch.tensor([1] * len(pos_pairs) + [0] * len(neg_pairs))

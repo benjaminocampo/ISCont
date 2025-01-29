@@ -42,7 +42,7 @@ from transformers import AutoModelForSequenceClassification
 
 from utils.baseline import fit, evaluate, prepare_data
 from utils.helpers import flatten_dict, set_seed
-from utils.contrastive import fit_constrastive, prepare_cont_data
+from utils.contrastive import fit_contrastive, prepare_cont_data, ContrastiveModel
 
 load_dotenv()
 
@@ -83,9 +83,9 @@ def run_experiment(cfg: DictConfig, run: mlflow.ActiveRun):
     dev = pd.read_parquet(cfg.input.dev_file)
     test = pd.read_parquet(cfg.input.test_file)
 
-    train = train.sample(100, ignore_index=True)
-    dev = dev.sample(100, ignore_index=True)
-    test = test.sample(100, ignore_index=True)
+    #train = train.sample(100, ignore_index=True)
+    #dev = dev.sample(100, ignore_index=True)
+    #test = test.sample(100, ignore_index=True)
 
     train["label"] = train["label"].replace({"hs": 1, "non-hs": 0})
     dev["label"] = dev["label"].replace({"hs": 1, "non-hs": 0})
