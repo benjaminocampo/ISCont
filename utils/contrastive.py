@@ -334,7 +334,7 @@ def create_neg_pairs(data):
 import random
 
 def prepare_cont_data(
-    data, tokenizer, max_length, batch_size, do_shuffle, threshold=1e-1
+    data, tokenizer, max_length, batch_size, do_shuffle, threshold=1e-1, nof_pairs=50000
 ):
     pos_pairs = create_pos_pairs(data=data, threshold=threshold)
     neg_pairs = create_neg_pairs(data=data)
