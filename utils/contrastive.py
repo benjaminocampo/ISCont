@@ -341,8 +341,8 @@ def prepare_cont_data(
 
     #print(len(pos_pairs))
     #print(len(neg_pairs))
-    #pos_pairs = random.sample(pos_pairs, 500)
-    #neg_pairs = random.sample(neg_pairs, 500)
+    pos_pairs = random.sample(pos_pairs, nof_pairs)
+    neg_pairs = random.sample(neg_pairs, nof_pairs)
     all_pairs = pos_pairs + neg_pairs
 
     labels_cont = torch.tensor([1] * len(pos_pairs) + [0] * len(neg_pairs))
