@@ -157,7 +157,7 @@ def run_experiment(cfg: DictConfig, run: mlflow.ActiveRun):
         logger.info("evaluating model...")
 
         start_time = time.time()
-        model = cfg.train.model.train.model.model_module_load_eval.from_pretrained(
+        model = cfg.train.model.model_module_load_eval.from_pretrained(
             f"BenjaminOcampo/{model_name}"
         )
 
