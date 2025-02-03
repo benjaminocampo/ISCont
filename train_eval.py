@@ -83,9 +83,13 @@ def run_experiment(cfg: DictConfig, run: mlflow.ActiveRun):
     dev = pd.read_parquet(cfg.input.dev_file)
     test = pd.read_parquet(cfg.input.test_file)
 
-    #train = train.sample(100, ignore_index=True)
-    #dev = dev.sample(100, ignore_index=True)
-    #test = test.sample(100, ignore_index=True)
+    # train = train.sample(100, ignore_index=True)
+    # dev = dev.sample(100, ignore_index=True)
+    # test = test.sample(100, ignore_index=True)
+    if cfg.input.train_size is not None:
+        train, _ = train_test_split(
+            train, train_size=cfg.input.train_size, random_state=cfg.input.random_state
+        )
 
     train["label"] = train["label"].replace({"hs": 1, "non-hs": 0})
     dev["label"] = dev["label"].replace({"hs": 1, "non-hs": 0})
@@ -99,6 +103,7 @@ def run_experiment(cfg: DictConfig, run: mlflow.ActiveRun):
         max_length=cfg.model.params.max_length,
         batch_size=cfg.model.params.batch_size,
         do_shuffle=True,
+        sample_size=cfg.train.model.params.sample_size
     )
 
     dev_dataloader = cfg.train.model.data_module_dev(
@@ -152,7 +157,7 @@ def run_experiment(cfg: DictConfig, run: mlflow.ActiveRun):
         logger.info("evaluating model...")
 
         start_time = time.time()
-        model = AutoModelForSequenceClassification.from_pretrained(
+        model = cfg.train.model.train.model.model_module_load_eval.from_pretrained(
             f"BenjaminOcampo/{model_name}"
         )
 

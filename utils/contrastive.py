@@ -334,15 +334,14 @@ def create_neg_pairs(data):
 import random
 
 def prepare_cont_data(
-    data, tokenizer, max_length, batch_size, do_shuffle, threshold=1e-1, nof_pairs=50000
+    data, tokenizer, max_length, batch_size, do_shuffle, threshold=1e-1, sample_size=None
 ):
     pos_pairs = create_pos_pairs(data=data, threshold=threshold)
     neg_pairs = create_neg_pairs(data=data)
 
-    #print(len(pos_pairs))
-    #print(len(neg_pairs))
-    pos_pairs = random.sample(pos_pairs, nof_pairs)
-    neg_pairs = random.sample(neg_pairs, nof_pairs)
+    if sample_size is not None:
+        pos_pairs = random.sample(pos_pairs, sample_size)
+        neg_pairs = random.sample(neg_pairs, sample_size)
     all_pairs = pos_pairs + neg_pairs
 
     labels_cont = torch.tensor([1] * len(pos_pairs) + [0] * len(neg_pairs))

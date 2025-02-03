@@ -157,7 +157,9 @@ def evaluate(model, dataloader, device, criterion):
     return metrics, all_labels, y_pred, avg_loss
 
 
-def prepare_data(data, tokenizer, max_length, batch_size, do_shuffle):
+def prepare_data(data, tokenizer, max_length, batch_size, do_shuffle, sample_size=None):
+    if sample_size is not None:
+        data = data.sample(sample_size)
     texts, labels = data["text"], data["label"]
 
     dataset = BaselineDataset(
