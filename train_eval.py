@@ -42,7 +42,7 @@ from transformers import AutoModelForSequenceClassification
 
 from utils.baseline import fit, evaluate, prepare_data
 from utils.helpers import flatten_dict, set_seed
-from utils.contrastive import fit_contrastive, prepare_cont_data, ContrastiveModel
+from utils.contrastive import fit_contrastive, prepare_cont_data, ContrastiveModel, evaluate_contrastive
 
 load_dotenv()
 

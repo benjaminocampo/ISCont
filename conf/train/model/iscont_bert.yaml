@@ -1,6 +1,6 @@
 module: ${eval:ContrastiveModel}
 fit_module: ${eval:fit_contrastive}
-evaluate_module_dev: ${eval:evaluate_contrastive}
+evaluate_module_dev: ${eval:evaluate}
 evaluate_module_test: ${eval:evaluate}
 data_module_train: ${eval:prepare_cont_data}
 data_module_dev: ${eval:prepare_cont_data}
