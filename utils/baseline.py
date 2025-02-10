@@ -48,6 +48,7 @@ def fit(
     num_epochs,
     best_model_path,
     main_metric,
+    margin
 ):
     model = model.to(device)
 

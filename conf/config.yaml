@@ -24,3 +24,4 @@ model:
     threshold: 0.5
     num_labels: 2
     max_length: 512
+    margin: 0.5

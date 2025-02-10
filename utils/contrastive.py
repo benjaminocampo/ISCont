@@ -115,11 +115,12 @@ def fit_contrastive(
     num_epochs,
     best_model_path,
     main_metric,
+    margin
 ):
     model = model.to(device)
 
     criterion = nn.CrossEntropyLoss()
-    cont_criterion = ContrastiveLoss()
+    cont_criterion = ContrastiveLoss(margin=margin)
 
     best_metric = -1
     history = {
