@@ -147,6 +147,7 @@ def run_experiment(cfg: DictConfig, run: mlflow.ActiveRun):
             num_epochs=cfg.model.params.num_epochs,
             best_model_path=model_name,
             main_metric=cfg.model.params.main_metric,
+            margin=cfg.model.params.margin
         )
         elapsed_time = time.time() - start_time
         print("Train time:", elapsed_time / 60, "minutes")
